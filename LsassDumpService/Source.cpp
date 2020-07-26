@@ -217,6 +217,7 @@ DWORD dump() {
 		return FALSE;
 
 	RtlGetVersion(&osInfo);
+	swprintf_s(pWinVerInfo->chOSMajorMinor, _countof(pWinVerInfo->chOSMajorMinor), L"%u.%u", osInfo.dwMajorVersion, osInfo.dwMinorVersion);
 	pWinVerInfo->dwBuildNumber = osInfo.dwBuildNumber;
 
 	// Create os/build-specific syscall function pointers.
@@ -280,7 +281,7 @@ DWORD dump() {
 	WCHAR chWinPath[MAX_PATH];
 	GetWindowsDirectory(chWinPath, MAX_PATH);
 	wcscat_s(chDmpFile, sizeof(chDmpFile) / sizeof(wchar_t), chWinPath);
-	wcscat_s(chDmpFile, sizeof(chDmpFile) / sizeof(wchar_t), L"\\Temp\\dumpert.dmp");
+	wcscat_s(chDmpFile, sizeof(chDmpFile) / sizeof(wchar_t), L"\\Temp\\dump.dmp");
 	UNICODE_STRING uFileName;
 	RtlInitUnicodeString(&uFileName, chDmpFile);
 
